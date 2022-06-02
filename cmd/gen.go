@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"github.com/kubetrail/bip32/pkg/flags"
+	"github.com/kubetrail/bip32/pkg/keys"
 	"github.com/kubetrail/bip32/pkg/run"
 	"github.com/kubetrail/bip39/pkg/mnemonics"
 	"github.com/spf13/cobra"
@@ -63,8 +64,6 @@ generated after translating input mnemonic to English.
 
 Verify output using: http://bip32.org/
 
-References:
-
 `,
 	RunE: run.Gen,
 	Args: cobra.MaximumNArgs(24),
@@ -74,13 +73,15 @@ func init() {
 	rootCmd.AddCommand(genCmd)
 	f := genCmd.Flags()
 
-	f.String(flags.DerivationPath, flags.DerivationPath0, "Chain Derivation path")
+	f.String(flags.DerivationPath, flags.DerivationPathAuto, "Chain Derivation path")
 	f.Bool(flags.UsePassphrase, false, "Prompt for secret passphrase")
 	f.Bool(flags.InputHexSeed, false, "Treat input as hex seed instead of mnemonic")
 	f.String(flags.MnemonicLanguage, mnemonics.LanguageEnglish, "Mnemonic language")
 	f.Bool(flags.SkipMnemonicValidation, false, "Skip mnemonic validation")
 	// https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 	f.String(flags.Network, flags.NetworkMainnet, "Network: mainnet or testnet")
+	f.String(flags.AddrType, keys.AddrTypeP2pkhOrP2sh, "Script type")
+	f.Bool(flags.ShowAllKeys, false, "Show all keys")
 
 	_ = genCmd.RegisterFlagCompletionFunc(
 		flags.Network,
@@ -94,7 +95,7 @@ func init() {
 		) {
 			return []string{
 					flags.NetworkMainnet,
-					flags.NetworkMainnet,
+					flags.NetworkTestnet,
 				},
 				cobra.ShellCompDirectiveDefault
 		},
@@ -136,13 +137,41 @@ func init() {
 			cobra.ShellCompDirective,
 		) {
 			return []string{
-					"example-derivation-paths",
 					flags.DerivationPath0,
 					flags.DerivationPath1,
 					flags.DerivationPath2,
 					flags.DerivationPath3,
 					flags.DerivationPath4,
 					flags.DerivationPath5,
+					flags.DerivationPath6,
+					flags.DerivationPath7,
+					flags.DerivationPath8,
+				},
+				cobra.ShellCompDirectiveDefault
+		},
+	)
+
+	_ = genCmd.RegisterFlagCompletionFunc(
+		flags.AddrType,
+		func(
+			cmd *cobra.Command,
+			args []string,
+			toComplete string,
+		) (
+			[]string,
+			cobra.ShellCompDirective,
+		) {
+			return []string{
+					keys.AddrTypeLegacy,
+					keys.AddrTypeP2sh,
+					keys.AddrTypeSegWitCompatible,
+					keys.AddrTypeSegWitNative,
+					keys.AddrTypeBech32,
+					keys.AddrTypeP2pkhOrP2sh,
+					keys.AddrTypeP2wpkhP2sh,
+					keys.AddrTypeP2wshP2sh,
+					keys.AddrTypeP2wpkh,
+					keys.AddrTypeP2wsh,
 				},
 				cobra.ShellCompDirectiveDefault
 		},

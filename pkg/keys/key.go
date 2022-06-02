@@ -14,6 +14,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcutil"
 	"github.com/tyler-smith/go-bip32"
 )
@@ -34,23 +35,120 @@ var netParams = map[string]*chaincfg.Params{
 }
 
 var (
-	keyVersions map[string][]byte
+	keyVersions       map[string][]byte
+	mainnetVersions   map[string]struct{}
+	testnetVersions   map[string]struct{}
+	versionToVersions map[string][]string
+	versionToAddrType map[string]string
 )
 
+func mustDecodeHex(input string) []byte {
+	b, err := hex.DecodeString(input)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func init() {
-	mustDecodeHex := func(input string) []byte {
-		b, err := hex.DecodeString(input)
-		if err != nil {
-			panic(err)
-		}
-		return b
+	// https://electrum.readthedocs.io/en/latest/xpub_version_bytes.html#specification
+	keyVersions = map[string][]byte{
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2pkhOrP2sh, KeyTypePub): mustDecodeHex(xpub),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2pkhOrP2sh, KeyTypePrv): mustDecodeHex(xprv),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2pkhOrP2sh, KeyTypePub): mustDecodeHex(tpub),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2pkhOrP2sh, KeyTypePrv): mustDecodeHex(tprv),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wpkhP2sh, KeyTypePub):  mustDecodeHex(ypub),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wpkhP2sh, KeyTypePrv):  mustDecodeHex(yprv),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wpkhP2sh, KeyTypePub):  mustDecodeHex(upub),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wpkhP2sh, KeyTypePrv):  mustDecodeHex(uprv),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wshP2sh, KeyTypePub):   mustDecodeHex(Ypub),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wshP2sh, KeyTypePrv):   mustDecodeHex(Yprv),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wshP2sh, KeyTypePub):   mustDecodeHex(Upub),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wshP2sh, KeyTypePrv):   mustDecodeHex(Uprv),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wpkh, KeyTypePub):      mustDecodeHex(zpub),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wpkh, KeyTypePrv):      mustDecodeHex(zprv),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wpkh, KeyTypePub):      mustDecodeHex(vpub),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wpkh, KeyTypePrv):      mustDecodeHex(vprv),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wsh, KeyTypePub):       mustDecodeHex(Zpub),
+		path.Join(CoinTypeBtc, NetworkTypeMainnet, AddrTypeP2wsh, KeyTypePrv):       mustDecodeHex(Zprv),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wsh, KeyTypePub):       mustDecodeHex(Vpub),
+		path.Join(CoinTypeBtc, NetworkTypeTestnet, AddrTypeP2wsh, KeyTypePrv):       mustDecodeHex(Vprv),
 	}
 
-	keyVersions = map[string][]byte{
-		path.Join(CoinTypeBtc, NetworkTypeMainnet, KeyTypePub): mustDecodeHex("0488B21E"),
-		path.Join(CoinTypeBtc, NetworkTypeMainnet, KeyTypePrv): mustDecodeHex("0488ADE4"),
-		path.Join(CoinTypeBtc, NetworkTypeTestnet, KeyTypePub): mustDecodeHex("043587CF"),
-		path.Join(CoinTypeBtc, NetworkTypeTestnet, KeyTypePrv): mustDecodeHex("04358394"),
+	mainnetVersions = map[string]struct{}{
+		xpub: {},
+		xprv: {},
+		ypub: {},
+		yprv: {},
+		Ypub: {},
+		Yprv: {},
+		zpub: {},
+		zprv: {},
+		Zpub: {},
+		Zprv: {},
+	}
+
+	testnetVersions = map[string]struct{}{
+		tpub: {},
+		tprv: {},
+		upub: {},
+		uprv: {},
+		Upub: {},
+		Uprv: {},
+		vpub: {},
+		vprv: {},
+		Vpub: {},
+		Vprv: {},
+	}
+
+	// versionToVersions is used to detect input extended key version
+	// and thereby assign bip32 pkg key versions, hence each detected
+	// key version, whether from private key or public key, is matched
+	// against a tuple of corresponding public and private key versions
+	versionToVersions = map[string][]string{
+		xpub: {xpub, xprv},
+		xprv: {xpub, xprv},
+		ypub: {ypub, yprv},
+		yprv: {ypub, yprv},
+		Ypub: {Ypub, Yprv},
+		Yprv: {Ypub, Yprv},
+		zpub: {zpub, zprv},
+		zprv: {zpub, zprv},
+		Zpub: {Zpub, Zprv},
+		Zprv: {Zpub, Zprv},
+		tpub: {tpub, tprv},
+		tprv: {tpub, tprv},
+		upub: {upub, uprv},
+		uprv: {upub, uprv},
+		Upub: {Upub, Uprv},
+		Uprv: {Upub, Uprv},
+		vpub: {vpub, vprv},
+		vprv: {vpub, vprv},
+		Vpub: {Vpub, Vprv},
+		Vprv: {Vpub, Vprv},
+	}
+
+	versionToAddrType = map[string]string{
+		xpub: AddrTypeP2pkhOrP2sh,
+		xprv: AddrTypeP2pkhOrP2sh,
+		ypub: AddrTypeP2wpkhP2sh,
+		yprv: AddrTypeP2wpkhP2sh,
+		Ypub: AddrTypeP2wshP2sh,
+		Yprv: AddrTypeP2wshP2sh,
+		zpub: AddrTypeP2wpkh,
+		zprv: AddrTypeP2wpkh,
+		Zpub: AddrTypeP2wsh,
+		Zprv: AddrTypeP2wsh,
+		tpub: AddrTypeP2pkhOrP2sh,
+		tprv: AddrTypeP2pkhOrP2sh,
+		upub: AddrTypeP2wpkhP2sh,
+		uprv: AddrTypeP2wpkhP2sh,
+		Upub: AddrTypeP2wshP2sh,
+		Uprv: AddrTypeP2wshP2sh,
+		vpub: AddrTypeP2wpkh,
+		vprv: AddrTypeP2wpkh,
+		Vpub: AddrTypeP2wsh,
+		Vprv: AddrTypeP2wsh,
 	}
 }
 
@@ -76,19 +174,65 @@ type Key struct {
 	Seed           string `json:"seed,omitempty" yaml:"seed,omitempty"`
 	XPrv           string `json:"xPrv,omitempty" yaml:"xPrv,omitempty"`
 	XPub           string `json:"xPub,omitempty" yaml:"xPub,omitempty"`
-	PrvKeyWif      string `json:"prvKeyWif,omitempty" yaml:"prvKeyWif,omitempty"`
 	PubKeyHex      string `json:"pubKeyHex,omitempty" yaml:"pubKeyHex,omitempty"`
+	PrvKeyWif      string `json:"prvKeyWif,omitempty" yaml:"prvKeyWif,omitempty"`
 	Addr           string `json:"addr,omitempty" yaml:"addr,omitempty"`
-	Network        string `json:"network,omitempty" yaml:"network,omitempty"`
+	AddrType       string `json:"addrType,omitempty" yaml:"addrType,omitempty"`
 	DerivationPath string `json:"derivationPath,omitempty" yaml:"derivationPath,omitempty"`
 	CoinType       string `json:"coinType,omitempty" yaml:"coinType,omitempty"`
+	Network        string `json:"network,omitempty" yaml:"network,omitempty"`
+	segWitNested   string
+	segWitBech32   string
+}
+
+type Config struct {
+	Seed           []byte
+	Network        string
+	DerivationPath string
+	ScriptType     string
 }
 
 // New generates a new key pair with a seed. The derivation paths
 // can be successive derivation indices such as m, 0, 0h etc.
 // or can be provided as m/0/0h.
-func New(seed []byte, network, derivationPath string) (*Key, error) {
-	network = strings.ToLower(network)
+func New(config *Config) (*Key, error) {
+	seed, network, derivationPath, scriptType :=
+		config.Seed,
+		strings.ToLower(config.Network),
+		strings.ToLower(config.DerivationPath),
+		strings.ToLower(config.ScriptType)
+
+	var addrType string
+
+	switch scriptType {
+	case AddrTypeLegacy:
+		scriptType = AddrTypeP2pkhOrP2sh
+	case AddrTypeP2sh, AddrTypeSegWitCompatible:
+		scriptType = AddrTypeP2wpkhP2sh
+	case AddrTypeSegWitNative, AddrTypeBech32:
+		scriptType = AddrTypeP2wpkh
+	}
+
+	if derivationPath == "auto" {
+		switch scriptType {
+		case AddrTypeP2pkhOrP2sh:
+			derivationPath = "m/44h/0h/0h/0/0"
+		case AddrTypeP2wpkhP2sh, AddrTypeP2wshP2sh:
+			derivationPath = "m/49h/0h/0h/0/0"
+		case AddrTypeP2wpkh, AddrTypeP2wsh:
+			derivationPath = "m/84h/0h/0h/0/0"
+		}
+	}
+
+	switch scriptType {
+	case AddrTypeP2pkhOrP2sh:
+		addrType = AddrTypeLegacy
+	case AddrTypeP2wpkhP2sh, AddrTypeP2wshP2sh:
+		addrType = fmt.Sprintf("%s, %s", AddrTypeSegWitCompatible, AddrTypeP2sh)
+	case AddrTypeP2wpkh, AddrTypeP2wsh:
+		addrType = fmt.Sprintf("%s, %s", AddrTypeSegWitNative, AddrTypeBech32)
+	}
+
 	switch network {
 	case NetworkTypeMainnet, NetworkTypeTestnet:
 	default:
@@ -98,8 +242,16 @@ func New(seed []byte, network, derivationPath string) (*Key, error) {
 	}
 
 	// setup key versions based on network
-	bip32.PrivateWalletVersion = keyVersions[path.Join(CoinTypeBtc, network, KeyTypePrv)]
-	bip32.PublicWalletVersion = keyVersions[path.Join(CoinTypeBtc, network, KeyTypePub)]
+	var ok bool
+	bip32.PublicWalletVersion, ok = keyVersions[path.Join(CoinTypeBtc, network, scriptType, KeyTypePub)]
+	if !ok {
+		return nil, fmt.Errorf("failed to get key version for pubic key")
+	}
+
+	bip32.PrivateWalletVersion, ok = keyVersions[path.Join(CoinTypeBtc, network, scriptType, KeyTypePrv)]
+	if !ok {
+		return nil, fmt.Errorf("failed to get key version for private key")
+	}
 
 	xKey, err := bip32.NewMasterKey(seed)
 	if err != nil {
@@ -118,6 +270,16 @@ func New(seed []byte, network, derivationPath string) (*Key, error) {
 
 	key.Seed = hex.EncodeToString(seed)
 	key.DerivationPath = derivationPath
+	key.AddrType = addrType
+
+	switch scriptType {
+	case AddrTypeP2pkhOrP2sh:
+		key.segWitNested, key.segWitBech32 = "", ""
+	case AddrTypeP2wpkhP2sh, AddrTypeP2wshP2sh:
+		key.Addr, key.segWitNested, key.segWitBech32 = key.segWitNested, "", ""
+	case AddrTypeP2wpkh, AddrTypeP2wsh:
+		key.Addr, key.segWitNested, key.segWitBech32 = key.segWitBech32, "", ""
+	}
 
 	return key, nil
 }
@@ -221,17 +383,48 @@ func DecodeExtendedKey(keyString string) (*Key, error) {
 }
 
 func Derive(keyString string, derivationPath string) (*Key, error) {
-	key, err := bip32.B58Deserialize(keyString)
+	bip32Key, err := bip32.B58Deserialize(keyString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize key: %w", err)
 	}
 
-	key, err = extendedKeyToDerivedExtendedKey(key, derivationPath)
+	versions, ok := versionToVersions[hex.EncodeToString(bip32Key.Version)]
+	if !ok {
+		return nil, fmt.Errorf("failed to identity valid key version: %w", err)
+	}
+
+	bip32.PublicWalletVersion = mustDecodeHex(versions[0])
+	bip32.PrivateWalletVersion = mustDecodeHex(versions[1])
+
+	bip32Key, err = extendedKeyToDerivedExtendedKey(bip32Key, derivationPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive extended key: %w", err)
 	}
 
-	return extendedKeyToKey(key)
+	key, err := extendedKeyToKey(bip32Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key from extended key")
+	}
+
+	switch versionToAddrType[hex.EncodeToString(bip32Key.Version)] {
+	case AddrTypeP2pkhOrP2sh:
+		key.segWitNested, key.segWitBech32 = "", ""
+	case AddrTypeP2wpkhP2sh, AddrTypeP2wshP2sh:
+		key.Addr, key.segWitNested, key.segWitBech32 = key.segWitNested, "", ""
+	case AddrTypeP2wpkh, AddrTypeP2wsh:
+		key.Addr, key.segWitNested, key.segWitBech32 = key.segWitBech32, "", ""
+	}
+
+	switch versionToAddrType[hex.EncodeToString(bip32Key.Version)] {
+	case AddrTypeP2pkhOrP2sh:
+		key.AddrType = AddrTypeLegacy
+	case AddrTypeP2wpkhP2sh, AddrTypeP2wshP2sh:
+		key.AddrType = fmt.Sprintf("%s, %s", AddrTypeSegWitCompatible, AddrTypeP2sh)
+	case AddrTypeP2wpkh, AddrTypeP2wsh:
+		key.AddrType = fmt.Sprintf("%s, %s", AddrTypeSegWitNative, AddrTypeBech32)
+	}
+
+	return key, nil
 }
 
 func extendedKeyToDerivedExtendedKey(key *bip32.Key, derivationPath string) (*bip32.Key, error) {
@@ -277,17 +470,11 @@ func extendedKeyToKey(key *bip32.Key) (*Key, error) {
 	var network string
 	var params *chaincfg.Params
 
-	if len(network) == 0 {
-		if bytes.Equal(key.Version, keyVersions[path.Join(CoinTypeBtc, NetworkTypeMainnet, KeyTypePub)]) ||
-			bytes.Equal(key.Version, keyVersions[path.Join(CoinTypeBtc, NetworkTypeMainnet, KeyTypePrv)]) {
-			params = &chaincfg.MainNetParams
-			network = NetworkTypeMainnet
-		}
-	}
-
-	if len(network) == 0 {
-		if bytes.Equal(key.Version, keyVersions[path.Join(CoinTypeBtc, NetworkTypeTestnet, KeyTypePub)]) ||
-			bytes.Equal(key.Version, keyVersions[path.Join(CoinTypeBtc, NetworkTypeTestnet, KeyTypePrv)]) {
+	if _, ok := mainnetVersions[hex.EncodeToString(key.Version)]; ok {
+		params = &chaincfg.MainNetParams
+		network = NetworkTypeMainnet
+	} else {
+		if _, ok := testnetVersions[hex.EncodeToString(key.Version)]; ok {
 			params = &chaincfg.TestNet3Params
 			network = NetworkTypeTestnet
 		}
@@ -315,45 +502,71 @@ func extendedKeyToKey(key *bip32.Key) (*Key, error) {
 	}
 
 	pubKeyString = fmt.Sprintf("%s", pubKey)
+	var serializedPubKey []byte
 
 	if prvKey != nil {
 		prvKeyString = fmt.Sprintf("%s", prvKey)
 
 		prv, _ := btcec.PrivKeyFromBytes(btcec.S256(), prvKey.Key)
+
 		wif, err := btcutil.NewWIF(prv, params, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate wif formatted prv key: %w", err)
 		}
 		prvKeyWif = wif.String()
 
-		serializedPubKey := wif.SerializePubKey()
-		addressPubKey, err := btcutil.NewAddressPubKey(serializedPubKey, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate new address from pub key: %w", err)
-		}
-
-		addr = addressPubKey.EncodeAddress()
+		serializedPubKey = wif.SerializePubKey()
 	} else {
 		p, err := btcec.ParsePubKey(pubKey.Key, btcec.S256())
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse pubkey: %w", err)
 		}
-		addressPubKey, err := btcutil.NewAddressPubKey(p.SerializeCompressed(), params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate new address from pub key: %w", err)
-		}
 
-		addr = addressPubKey.EncodeAddress()
+		serializedPubKey = p.SerializeCompressed()
 	}
 
+	addressPubKey, err := btcutil.NewAddressPubKey(serializedPubKey, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new address from pub key: %w", err)
+	}
+
+	addr = addressPubKey.EncodeAddress()
+
+	// generate a normal p2wkh address from the pubkey hash
+	witnessProg := btcutil.Hash160(serializedPubKey)
+	addressWitnessPubKeyHash, err := btcutil.NewAddressWitnessPubKeyHash(witnessProg, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new address witness pub key hash: %w", err)
+	}
+
+	segwitBech32 := addressWitnessPubKeyHash.EncodeAddress()
+
+	// generate an address which is
+	// backwards compatible to Bitcoin nodes running 0.6.0 onwards, but
+	// allows us to take advantage of segwit's scripting improvments,
+	// and malleability fixes.
+	serializedScript, err := txscript.PayToAddrScript(addressWitnessPubKeyHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate pay to addr script: %w", err)
+	}
+
+	addressScriptHash, err := btcutil.NewAddressScriptHash(serializedScript, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new address script hash: %w", err)
+	}
+
+	segwitNested := addressScriptHash.EncodeAddress()
+
 	return &Key{
-		XPrv:      prvKeyString,
-		XPub:      pubKeyString,
-		PrvKeyWif: prvKeyWif,
-		PubKeyHex: hex.EncodeToString(pubKey.Key),
-		Addr:      addr,
-		Network:   network,
-		CoinType:  CoinTypeBtc,
+		XPrv:         prvKeyString,
+		XPub:         pubKeyString,
+		PrvKeyWif:    prvKeyWif,
+		PubKeyHex:    hex.EncodeToString(pubKey.Key),
+		Addr:         addr,
+		segWitNested: segwitNested,
+		segWitBech32: segwitBech32,
+		Network:      network,
+		CoinType:     CoinTypeBtc,
 	}, nil
 }
 
